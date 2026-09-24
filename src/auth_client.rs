@@ -262,6 +262,7 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     #[cfg(unix)]
     use tokio::net::{TcpListener, TcpStream};
+    #[cfg(unix)]
     use url::Url;
 
     #[cfg(unix)]
