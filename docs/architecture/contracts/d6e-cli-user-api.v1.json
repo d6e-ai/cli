@@ -1,0 +1,348 @@
+{
+  "format": "d6e-cli-user-api-contract",
+  "contract": "d6e-cli-user-api",
+  "version": 1,
+  "basePath": "/api/v1",
+  "mediaType": "application/json",
+  "authentication": {
+    "scheme": "bearer",
+    "tokenKind": "access",
+    "audience": "d6e-cli",
+    "userIdentityClaim": "sub",
+    "refreshTokensAccepted": false,
+    "multipleAudiencesAccepted": false,
+    "resourceUserIdsAccepted": false
+  },
+  "authorization": {
+    "membershipSource": "current_database_membership",
+    "membershipCheckedEveryRequest": true,
+    "nonmemberStatus": 404,
+    "foreignResourceStatus": 404,
+    "roles": ["owner", "admin", "member"]
+  },
+  "transport": {
+    "requestId": {
+      "requestHeader": "X-Request-Id",
+      "responseHeader": "X-Request-Id",
+      "generatedWhenMissingOrInvalid": true
+    },
+    "sessionMutationCsrf": {
+      "requiredHeader": "Origin",
+      "mustMatchRequestOrigin": true,
+      "appliesToBearerRequests": false
+    },
+    "cacheControl": "private, no-store"
+  },
+  "errors": {
+    "shape": {
+      "required": ["error", "message"],
+      "errorType": "string",
+      "messageType": "string"
+    },
+    "statuses": {
+      "unauthorized": 401,
+      "forbidden": 403,
+      "not_found": 404,
+      "conflict": 409,
+      "invalid_request": 400,
+      "precondition_required": 428,
+      "csrf_error": 403,
+      "internal_error": 500
+    }
+  },
+  "secretDisclosure": {
+    "field": "clientSecret",
+    "oneTime": true,
+    "allowedOperationIds": ["authClients.create", "authClients.rotateSecret"],
+    "forbiddenInLogsErrorsAndFixtures": true
+  },
+  "operations": [
+    {
+      "operationId": "me.get",
+      "method": "GET",
+      "path": "/me",
+      "permission": "self",
+      "response": {
+        "status": 200,
+        "requiredFields": [
+          "user.id",
+          "user.email",
+          "user.name",
+          "user.updatedAt"
+        ]
+      }
+    },
+    {
+      "operationId": "me.updateName",
+      "method": "PATCH",
+      "path": "/me",
+      "permission": "self",
+      "request": {
+        "requiredFields": ["name"],
+        "allowedFields": ["name"],
+        "name": {
+          "type": "string",
+          "trim": true,
+          "minLength": 1,
+          "maxLength": 100
+        }
+      },
+      "response": {
+        "status": 200,
+        "requiredFields": [
+          "user.id",
+          "user.email",
+          "user.name",
+          "user.updatedAt"
+        ]
+      }
+    },
+    {
+      "operationId": "organizations.list",
+      "method": "GET",
+      "path": "/organizations",
+      "permission": "member+",
+      "response": {
+        "status": 200,
+        "requiredFields": ["memberships"],
+        "itemFields": [
+          "role",
+          "joinedAt",
+          "organization.id",
+          "organization.name",
+          "organization.status"
+        ]
+      }
+    },
+    {
+      "operationId": "organizations.create",
+      "method": "POST",
+      "path": "/organizations",
+      "permission": "authenticated_user",
+      "effect": "creator_becomes_owner",
+      "request": {
+        "requiredFields": ["name"],
+        "allowedFields": ["name"]
+      },
+      "response": {
+        "status": 201,
+        "requiredFields": [
+          "organization.id",
+          "organization.name",
+          "organization.status"
+        ]
+      }
+    },
+    {
+      "operationId": "organizations.get",
+      "method": "GET",
+      "path": "/organizations/{organizationId}",
+      "permission": "member+",
+      "response": {
+        "status": 200,
+        "requiredFields": [
+          "organization.id",
+          "organization.name",
+          "organization.status",
+          "organization.createdAt",
+          "role"
+        ]
+      }
+    },
+    {
+      "operationId": "organizations.updateName",
+      "method": "PATCH",
+      "path": "/organizations/{organizationId}",
+      "permission": "owner_or_admin",
+      "request": {
+        "requiredFields": ["name"],
+        "allowedFields": ["name"],
+        "forbiddenFields": ["status"]
+      },
+      "response": {
+        "status": 200,
+        "requiredFields": [
+          "organization.id",
+          "organization.name",
+          "organization.status"
+        ]
+      }
+    },
+    {
+      "operationId": "organizationProfile.get",
+      "method": "GET",
+      "path": "/organizations/{organizationId}/profile",
+      "permission": "member+",
+      "response": {
+        "status": 200,
+        "requiredHeaders": ["ETag"],
+        "requiredFields": [
+          "organization",
+          "profile.legalName",
+          "profile.country",
+          "profile.address",
+          "profile.billingEmail",
+          "profile.phone",
+          "taxIds",
+          "updatedAt",
+          "version"
+        ],
+        "absentProfile": {
+          "version": "0",
+          "updatedAt": null,
+          "nullableProfileFields": true
+        }
+      }
+    },
+    {
+      "operationId": "organizationProfile.patch",
+      "method": "PATCH",
+      "path": "/organizations/{organizationId}/profile",
+      "permission": "owner_or_admin",
+      "request": {
+        "requiredHeaders": ["If-Match"],
+        "etagSourceOperationId": "organizationProfile.get",
+        "allowedFields": [
+          "legalName",
+          "country",
+          "address",
+          "billingEmail",
+          "phone"
+        ],
+        "patchSemantics": {
+          "omitted": "preserve",
+          "null": "clear",
+          "addressOmittedLines": "preserve",
+          "addressNullLines": "clear"
+        }
+      },
+      "response": {
+        "status": 200,
+        "staleStatus": 409,
+        "requiredHeaders": ["ETag"],
+        "requiredFields": ["profile", "updatedAt", "version"]
+      }
+    },
+    {
+      "operationId": "authClients.list",
+      "method": "GET",
+      "path": "/organizations/{organizationId}/auth-clients",
+      "permission": "member+",
+      "response": {
+        "status": 200,
+        "requiredFields": ["clients"],
+        "containsSecret": false
+      }
+    },
+    {
+      "operationId": "authClients.get",
+      "method": "GET",
+      "path": "/organizations/{organizationId}/auth-clients/{clientId}",
+      "permission": "member+",
+      "response": {
+        "status": 200,
+        "requiredFields": ["client"],
+        "containsSecret": false
+      }
+    },
+    {
+      "operationId": "authClients.create",
+      "method": "POST",
+      "path": "/organizations/{organizationId}/auth-clients",
+      "permission": "owner_or_admin",
+      "request": {
+        "requiredFields": ["name"],
+        "allowedFields": [
+          "name",
+          "redirectUris",
+          "allowedEmailDomains",
+          "status"
+        ],
+        "forbiddenFields": ["clientSecret"]
+      },
+      "response": {
+        "status": 201,
+        "requiredFields": ["client", "clientId", "clientSecret"],
+        "oneTimeSecretField": "clientSecret"
+      }
+    },
+    {
+      "operationId": "authClients.update",
+      "method": "PATCH",
+      "path": "/organizations/{organizationId}/auth-clients/{clientId}",
+      "permission": "owner_or_admin",
+      "request": {
+        "allowedFields": [
+          "name",
+          "redirectUris",
+          "allowedEmailDomains",
+          "status"
+        ],
+        "forbiddenFields": ["clientId", "clientSecret"]
+      },
+      "response": {
+        "status": 200,
+        "requiredFields": ["client"],
+        "containsSecret": false
+      }
+    },
+    {
+      "operationId": "authClients.revoke",
+      "method": "PATCH",
+      "path": "/organizations/{organizationId}/auth-clients/{clientId}",
+      "permission": "owner_or_admin",
+      "request": {
+        "exactBody": {
+          "status": "inactive"
+        }
+      },
+      "response": {
+        "status": 200,
+        "requiredFields": ["client"],
+        "containsSecret": false
+      }
+    },
+    {
+      "operationId": "authClients.rotateSecret",
+      "method": "POST",
+      "path": "/organizations/{organizationId}/auth-clients/{clientId}/secret",
+      "permission": "owner_or_admin",
+      "request": {
+        "requiredFields": [],
+        "allowedFields": []
+      },
+      "response": {
+        "status": 200,
+        "requiredFields": ["client", "clientId", "clientSecret"],
+        "oneTimeSecretField": "clientSecret"
+      }
+    }
+  ],
+  "nonScope": [
+    {
+      "capability": "organization_status_update",
+      "method": "PATCH",
+      "path": "/organizations/{organizationId}",
+      "field": "status"
+    },
+    {
+      "capability": "organization_delete"
+    },
+    {
+      "capability": "auth_client_delete",
+      "method": "DELETE",
+      "path": "/organizations/{organizationId}/auth-clients/{clientId}"
+    },
+    {
+      "capability": "organization_member_management",
+      "pathPrefix": "/organizations/{organizationId}/members"
+    },
+    {
+      "capability": "organization_invitation_management"
+    },
+    {
+      "capability": "organization_tax_id_mutation",
+      "pathPrefix": "/organizations/{organizationId}/tax-ids"
+    }
+  ]
+}
