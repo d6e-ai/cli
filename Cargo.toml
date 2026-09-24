@@ -1,0 +1,42 @@
+[package]
+name = "d6e-cli"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Agent-friendly command line interface for D6E"
+repository = "https://github.com/d6e-ai/cli"
+
+[[bin]]
+name = "d6e"
+path = "src/main.rs"
+
+[dependencies]
+base64 = "0.22"
+clap = { version = "4.6", features = ["derive", "env"] }
+getrandom = "0.3"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+secrecy = { version = "0.10", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "time"] }
+url = "2"
+webbrowser = "1.2"
+zeroize = "1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.2", default-features = false, features = ["linux-native-async-persistent", "async-io", "crypto-rust"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6.2", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6.2", default-features = false, features = ["windows-native"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+strip = true
