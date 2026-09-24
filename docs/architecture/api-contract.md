@@ -18,9 +18,13 @@ The OAuth token endpoint `/api/v1/auth/token` is specified by d6e-auth's route c
 | `d6e personal show` | `GET /api/v1/me` | Returns `user.id`, `email`, `name`, `updatedAt`. |
 | `d6e personal update --name NAME` | `PATCH /api/v1/me` | Sends only `{ "name": "..." }`; server trims it and requires 1–100 characters. |
 
-## Subsequent organization operations
+## Organization operations
 
-The v1 contract includes organization list/create/get/update; organization profile get/patch; and organization Auth Client list/get/create/update/revoke/rotate-secret. Organization name changes require owner or admin. Profile patch requires the `ETag` returned by profile get as `If-Match`; omitted fields are preserved, explicit `null` clears a field, and a stale version returns `409`. An absent profile has version `0`.
+`d6e organization list|show|create|update` use the corresponding organization endpoints. Name changes require owner or admin. Organization identifiers are UUIDs, validated before constructing a route path.
+
+`d6e organization profile show|update` use profile GET/PATCH. Update first reads the current profile and sends its `ETag` as `If-Match`; omitted fields are preserved, explicit `null` clears a field, and a stale version returns `409` without an automatic retry. An absent profile has version `0`. The CLI treats a missing GET `ETag` as a protocol error. Server `428` responses are surfaced with their API code and request ID.
+
+The v1 contract also includes organization Auth Client list/get/create/update/revoke/rotate-secret.
 
 The organization Auth Client create and rotate-secret responses reveal `clientSecret` exactly once. List, get, update, and revoke responses contain no secret. The CLI must require an explicit secret destination and must not put the secret into logs, ordinary JSON output, errors, or fixtures.
 
