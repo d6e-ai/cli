@@ -19,6 +19,9 @@ pub enum CliError {
     #[error("request failed")]
     Transport(#[from] reqwest::Error),
 
+    #[error("D6E Auth response is missing a required header: {header}")]
+    MissingApiHeader { header: &'static str },
+
     #[error("{message}")]
     Api {
         status: StatusCode,
@@ -44,7 +47,7 @@ impl CliError {
             Self::Api { status, .. } if status.as_u16() == 403 => 4,
             Self::Api { status, .. } if status.as_u16() == 404 => 5,
             Self::Api { status, .. } if status.as_u16() == 409 => 6,
-            Self::Api { .. } | Self::Transport(_) => 7,
+            Self::Api { .. } | Self::Transport(_) | Self::MissingApiHeader { .. } => 7,
             Self::Io(_) | Self::Serialization(_) | Self::CredentialStore => 8,
         }
     }
@@ -56,6 +59,7 @@ impl CliError {
             Self::Authentication { .. } => "authentication_failed",
             Self::CredentialStore => "credential_store_error",
             Self::Transport(_) => "network_error",
+            Self::MissingApiHeader { .. } => "api_protocol_error",
             Self::Api { code, .. } => code,
             Self::Io(_) => "io_error",
             Self::Serialization(_) => "serialization_error",

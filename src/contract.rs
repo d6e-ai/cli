@@ -2,6 +2,13 @@
 mod tests {
     use serde_json::Value;
 
+    fn operation<'a>(operations: &'a [Value], id: &str) -> &'a Value {
+        operations
+            .iter()
+            .find(|operation: &&Value| operation["operationId"] == id)
+            .expect("operation in pinned contract")
+    }
+
     #[test]
     fn personal_commands_match_pinned_d6e_auth_contract() {
         let contract: Value = serde_json::from_str(include_str!(
@@ -32,5 +39,58 @@ mod tests {
             serde_json::json!(["name"])
         );
         assert_eq!(update["request"]["name"]["maxLength"], 100);
+    }
+
+    #[test]
+    fn organization_commands_match_pinned_d6e_auth_contract() {
+        let contract: Value = serde_json::from_str(include_str!(
+            "../docs/architecture/contracts/d6e-cli-user-api.v1.json"
+        ))
+        .expect("valid contract JSON");
+        let operations: &[Value] = contract["operations"].as_array().expect("operations array");
+        for (id, method, path) in [
+            ("organizations.list", "GET", "/organizations"),
+            ("organizations.create", "POST", "/organizations"),
+            (
+                "organizations.get",
+                "GET",
+                "/organizations/{organizationId}",
+            ),
+            (
+                "organizations.updateName",
+                "PATCH",
+                "/organizations/{organizationId}",
+            ),
+            (
+                "organizationProfile.get",
+                "GET",
+                "/organizations/{organizationId}/profile",
+            ),
+            (
+                "organizationProfile.patch",
+                "PATCH",
+                "/organizations/{organizationId}/profile",
+            ),
+        ] {
+            let entry: &Value = operation(operations, id);
+            assert_eq!(entry["method"], method);
+            assert_eq!(entry["path"], path);
+        }
+        assert_eq!(
+            operation(operations, "organizations.updateName")["request"]["allowedFields"],
+            serde_json::json!(["name"])
+        );
+        assert_eq!(
+            operation(operations, "organizationProfile.get")["response"]["requiredHeaders"],
+            serde_json::json!(["ETag"])
+        );
+        assert_eq!(
+            operation(operations, "organizationProfile.patch")["request"]["requiredHeaders"],
+            serde_json::json!(["If-Match"])
+        );
+        assert_eq!(
+            operation(operations, "organizationProfile.patch")["response"]["staleStatus"],
+            409
+        );
     }
 }

@@ -17,6 +17,7 @@ pub struct ApiClient {
 pub struct ApiResponse<T> {
     pub value: T,
     pub request_id: Option<String>,
+    pub etag: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -69,12 +70,18 @@ where
         .get("x-request-id")
         .and_then(|value| value.to_str().ok())
         .map(ToOwned::to_owned);
+    let etag: Option<String> = response
+        .headers()
+        .get("etag")
+        .and_then(|value| value.to_str().ok())
+        .map(ToOwned::to_owned);
 
     if status.is_success() {
         let value: T = response.json().await?;
         return Ok(ApiResponse {
             value,
             request_id: header_request_id,
+            etag,
         });
     }
 
@@ -112,7 +119,7 @@ impl ApiClient {
     where
         T: DeserializeOwned,
     {
-        self.send::<(), T>(Method::GET, path, None).await
+        self.send::<(), T>(Method::GET, path, None, None).await
     }
 
     pub async fn patch<B, T>(&self, path: &str, body: &B) -> Result<ApiResponse<T>, CliError>
@@ -120,7 +127,28 @@ impl ApiClient {
         B: Serialize + ?Sized,
         T: DeserializeOwned,
     {
-        self.send(Method::PATCH, path, Some(body)).await
+        self.send(Method::PATCH, path, Some(body), None).await
+    }
+
+    pub async fn post<B, T>(&self, path: &str, body: &B) -> Result<ApiResponse<T>, CliError>
+    where
+        B: Serialize + ?Sized,
+        T: DeserializeOwned,
+    {
+        self.send(Method::POST, path, Some(body), None).await
+    }
+
+    pub async fn patch_if_match<B, T>(
+        &self,
+        path: &str,
+        body: &B,
+        etag: &str,
+    ) -> Result<ApiResponse<T>, CliError>
+    where
+        B: Serialize + ?Sized,
+        T: DeserializeOwned,
+    {
+        self.send(Method::PATCH, path, Some(body), Some(etag)).await
     }
 
     async fn send<B, T>(
@@ -128,6 +156,7 @@ impl ApiClient {
         method: Method,
         path: &str,
         body: Option<&B>,
+        if_match: Option<&str>,
     ) -> Result<ApiResponse<T>, CliError>
     where
         B: Serialize + ?Sized,
@@ -146,6 +175,9 @@ impl ApiClient {
             .header("accept", "application/json");
         if let Some(value) = body {
             request = request.json(value);
+        }
+        if let Some(value) = if_match {
+            request = request.header(reqwest::header::IF_MATCH, value);
         }
         decode_response(request.send().await?).await
     }

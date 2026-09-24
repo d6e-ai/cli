@@ -4,6 +4,7 @@ mod client;
 #[cfg(test)]
 mod contract;
 mod error;
+mod organization;
 mod output;
 mod personal;
 mod token_store;
@@ -35,5 +36,6 @@ async fn run(cli: Cli, store: &dyn token_store::TokenStore) -> Result<(), CliErr
     match cli.command {
         Command::Auth(args) => auth::run(&auth_url, store, args.command).await,
         Command::Personal(args) => personal::run(&auth_url, store, args.command).await,
+        Command::Organization(args) => organization::run(&auth_url, store, args.command).await,
     }
 }
