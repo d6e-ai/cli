@@ -149,7 +149,8 @@ pub async fn access_token_from_store(
         Err(CliError::Api {
             status, ref code, ..
         }) if status == reqwest::StatusCode::BAD_REQUEST && code == "invalid_grant" => {
-            store.delete(auth_url)?;
+            // A concurrent login may already have replaced the keyring entry.
+            // Deleting it here could sign out that newer session.
             return Err(CliError::MissingCredential);
         }
         Err(error) => return Err(error),
@@ -230,11 +231,8 @@ async fn login(auth_url: &Url, store: &dyn TokenStore, no_open: bool) -> Result<
     }
 
     let code: SecretString = wait_for_callback(listener, port, &attempt.state).await?;
-    let tokens: TokenResponse =
-        exchange_code(auth_url, &code, &attempt.verifier, &redirect_uri).await?;
-    let client: ApiClient = ApiClient::new(auth_url.clone(), tokens.access_token)?;
-    let response: ApiResponse<MeResponse> = get_personal(&client).await?;
-    store.save(auth_url, &tokens.refresh_token)?;
+    let response: ApiResponse<MeResponse> =
+        finish_login(auth_url, store, &code, &attempt.verifier, &redirect_uri).await?;
     output::print_data(
         &AuthStatus {
             logged_in: true,
@@ -242,6 +240,19 @@ async fn login(auth_url: &Url, store: &dyn TokenStore, no_open: bool) -> Result<
         },
         response.request_id.as_deref(),
     )
+}
+
+async fn finish_login(
+    auth_url: &Url,
+    store: &dyn TokenStore,
+    code: &SecretString,
+    verifier: &SecretString,
+    redirect_uri: &Url,
+) -> Result<ApiResponse<MeResponse>, CliError> {
+    let tokens: TokenResponse = exchange_code(auth_url, code, verifier, redirect_uri).await?;
+    store.save(auth_url, &tokens.refresh_token)?;
+    let client: ApiClient = ApiClient::new(auth_url.clone(), tokens.access_token)?;
+    get_personal(&client).await
 }
 
 async fn wait_for_callback(
@@ -252,13 +263,15 @@ async fn wait_for_callback(
     tokio::time::timeout(CALLBACK_TIMEOUT, async {
         loop {
             let (mut stream, _peer): (TcpStream, std::net::SocketAddr) = listener.accept().await?;
-            let request: Option<String> = read_callback_request(&mut stream).await?;
+            let request: Option<String> =
+                read_callback_request(&mut stream).await.unwrap_or_default();
             let Some(request) = request else {
-                send_callback_response(&mut stream, false).await?;
+                let _ = send_callback_response(&mut stream, false).await;
                 continue;
             };
             let result: CallbackResult = parse_callback(&request, port, state);
-            send_callback_response(&mut stream, matches!(result, CallbackResult::Code(_))).await?;
+            let _ = send_callback_response(&mut stream, matches!(result, CallbackResult::Code(_)))
+                .await;
             match result {
                 CallbackResult::Code(code) => return Ok(code),
                 CallbackResult::Denied => {
@@ -386,7 +399,7 @@ async fn send_callback_response(stream: &mut TcpStream, success: bool) -> Result
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     use secrecy::{ExposeSecret, SecretString};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -394,7 +407,8 @@ mod tests {
     use url::Url;
 
     use super::{
-        AuthAttempt, CallbackResult, access_token_from_store, exchange_code, parse_callback,
+        AuthAttempt, CallbackResult, access_token_from_store, exchange_code, finish_login,
+        parse_callback, wait_for_callback,
     };
     use crate::error::CliError;
     use crate::token_store::TokenStore;
@@ -565,5 +579,131 @@ mod tests {
             store.0.lock().expect("memory store lock").as_deref(),
             Some("new-refresh")
         );
+    }
+
+    #[tokio::test]
+    async fn invalid_grant_does_not_delete_a_newer_login() {
+        let listener: TcpListener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("token server");
+        let port: u16 = listener.local_addr().expect("server address").port();
+        let auth_url: Url = Url::parse(&format!("http://127.0.0.1:{port}/")).expect("auth origin");
+        let store: Arc<MemoryStore> =
+            Arc::new(MemoryStore(Mutex::new(Some("old-refresh".to_owned()))));
+        let server_store: Arc<MemoryStore> = Arc::clone(&store);
+        let server = tokio::spawn(async move {
+            let (mut stream, _): (tokio::net::TcpStream, std::net::SocketAddr) =
+                listener.accept().await.expect("refresh request");
+            let mut bytes: Vec<u8> = Vec::new();
+            let mut chunk: [u8; 1024] = [0_u8; 1024];
+            loop {
+                let count: usize = stream.read(&mut chunk).await.expect("read request");
+                assert!(count > 0, "request ended before body");
+                bytes.extend_from_slice(&chunk[..count]);
+                if String::from_utf8_lossy(&bytes).contains("old-refresh") {
+                    break;
+                }
+            }
+            *server_store.0.lock().expect("memory store lock") = Some("new-login".to_owned());
+            let body: &str = r#"{"error":"invalid_grant","message":"Invalid refresh token"}"#;
+            let response: String = format!(
+                "HTTP/1.1 400 Bad Request\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream
+                .write_all(response.as_bytes())
+                .await
+                .expect("send token response");
+        });
+
+        let result: Result<SecretString, CliError> =
+            access_token_from_store(&auth_url, store.as_ref()).await;
+        server.await.expect("server result");
+        assert!(matches!(result, Err(CliError::MissingCredential)));
+        assert_eq!(
+            store.0.lock().expect("memory store lock").as_deref(),
+            Some("new-login")
+        );
+    }
+
+    #[tokio::test]
+    async fn login_keeps_refresh_token_if_profile_fetch_fails() {
+        let listener: TcpListener = TcpListener::bind("127.0.0.1:0").await.expect("API server");
+        let port: u16 = listener.local_addr().expect("server address").port();
+        let auth_url: Url = Url::parse(&format!("http://127.0.0.1:{port}/")).expect("auth origin");
+        let redirect_uri: Url =
+            Url::parse("http://127.0.0.1:49152/callback").expect("callback URI");
+        let store: MemoryStore = MemoryStore(Mutex::new(None));
+        let server = tokio::spawn(async move {
+            for (expected_path, status, body) in [
+                (
+                    "/api/v1/auth/token",
+                    "200 OK",
+                    r#"{"access_token":"access-only","refresh_token":"saved-refresh","token_type":"Bearer","expires_in":3600}"#,
+                ),
+                (
+                    "/api/v1/me",
+                    "503 Service Unavailable",
+                    r#"{"error":"unavailable","message":"Try again later"}"#,
+                ),
+            ] {
+                let (mut stream, _): (tokio::net::TcpStream, std::net::SocketAddr) =
+                    listener.accept().await.expect("API request");
+                let mut bytes: [u8; 4096] = [0_u8; 4096];
+                let count: usize = stream.read(&mut bytes).await.expect("read request");
+                let request: String = String::from_utf8_lossy(&bytes[..count]).into_owned();
+                assert!(request.contains(expected_path));
+                let response: String = format!(
+                    "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .await
+                    .expect("send response");
+            }
+        });
+
+        let result = finish_login(
+            &auth_url,
+            &store,
+            &SecretString::from("code".to_owned()),
+            &SecretString::from("verifier".to_owned()),
+            &redirect_uri,
+        )
+        .await;
+        server.await.expect("server result");
+        assert!(matches!(result, Err(CliError::Api { .. })));
+        assert_eq!(
+            store.0.lock().expect("memory store lock").as_deref(),
+            Some("saved-refresh")
+        );
+    }
+
+    #[tokio::test]
+    async fn dropped_loopback_connection_does_not_abort_login() {
+        let listener: TcpListener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("callback listener");
+        let port: u16 = listener.local_addr().expect("listener address").port();
+        let state: SecretString = SecretString::from("expected-state".to_owned());
+        let callback = tokio::spawn(async move { wait_for_callback(listener, port, &state).await });
+
+        let dropped = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .expect("stray connection");
+        drop(dropped);
+        let mut valid = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .expect("valid connection");
+        let request: String = format!(
+            "GET /callback?code=accepted-code&state=expected-state HTTP/1.1\r\nhost: 127.0.0.1:{port}\r\n\r\n"
+        );
+        valid
+            .write_all(request.as_bytes())
+            .await
+            .expect("send callback");
+        let result: SecretString = callback.await.expect("callback task").expect("code result");
+        assert_eq!(result.expose_secret(), "accepted-code");
     }
 }

@@ -8,7 +8,7 @@ The CLI needs a session across invocations. A refresh token is longer lived than
 
 ## Decision
 
-Store the `d6e-cli` refresh token in the OS keyring, indexed by the configured d6e-auth origin. Keep access tokens, authorization codes, and PKCE verifiers in process memory only. Replace the stored refresh token after refresh and delete it on local logout or an invalid grant. Never fall back to a plaintext credential file or environment variable if the keyring is unavailable.
+Store the `d6e-cli` refresh token in the OS keyring, indexed by the configured d6e-auth origin. Keep access tokens, authorization codes, and PKCE verifiers in process memory only. Replace the stored refresh token after refresh and delete it on local logout. An invalid grant reports that login is needed without deleting the entry, since another process may have replaced it. Never fall back to a plaintext credential file or environment variable if the keyring is unavailable.
 
 Only one CLI account is active per origin. A later login replaces that origin's credential. Command output and diagnostics must never include token values. Tests use an in-memory credential-store implementation.
 

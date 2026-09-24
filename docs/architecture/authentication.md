@@ -15,7 +15,7 @@ The server accepts loopback HTTP only for registered host/path combinations with
 
 ## Subsequent commands
 
-Read the refresh token from the keyring when a fresh access token is needed. Exchange it at `/api/v1/auth/token` with `grant_type=refresh_token`, `client_id=d6e-cli`, and `refresh_token`, without a client secret. Replace the stored refresh token when the server returns a new one. Keep access tokens in process memory for the current invocation. On `invalid_grant`, remove the unusable local credential and ask the user to log in again.
+Read the refresh token from the keyring when a fresh access token is needed. Exchange it at `/api/v1/auth/token` with `grant_type=refresh_token`, `client_id=d6e-cli`, and `refresh_token`, without a client secret. Replace the stored refresh token when the server returns a new one. Keep access tokens in process memory for the current invocation. On `invalid_grant`, ask the user to log in again. Do not delete the keyring entry from a failed refresh: another process may have already stored a newer login there.
 
 `auth status` may query `/api/v1/me` to identify the signed-in user; it must not disclose tokens. `auth logout` deletes the CLI's local credential. Server-side token revocation is not part of the currently inspected token endpoint, so logout must not claim to invalidate already issued tokens remotely.
 
