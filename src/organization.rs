@@ -64,6 +64,14 @@ pub struct OrganizationProfileResponse {
     pub version: String,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrganizationProfilePatchResponse {
+    pub profile: ProfileValues,
+    pub updated_at: Option<String>,
+    pub version: String,
+}
+
 #[derive(Serialize)]
 struct NameRequest<'a> {
     name: &'a str,
@@ -259,7 +267,7 @@ async fn run_profile(
             fields,
         } => {
             let patch: Value = profile_patch(*fields)?;
-            let response: ApiResponse<OrganizationProfileResponse> =
+            let response: ApiResponse<OrganizationProfilePatchResponse> =
                 update_profile(client, &organization_id, &patch).await?;
             output::print_data(&response.value, response.request_id.as_deref())
         }
@@ -270,7 +278,7 @@ async fn update_profile(
     client: &ApiClient,
     organization_id: &str,
     patch: &Value,
-) -> Result<ApiResponse<OrganizationProfileResponse>, CliError> {
+) -> Result<ApiResponse<OrganizationProfilePatchResponse>, CliError> {
     let path: String = organization_path(organization_id, "/profile")?;
     let current: ApiResponse<OrganizationProfileResponse> = client.get(&path).await?;
     let etag: String = current
@@ -291,8 +299,9 @@ mod tests {
     use url::Url;
 
     use super::{
-        MembershipsResponse, NameRequest, OrganizationDetailResponse, OrganizationProfileResponse,
-        OrganizationResponse, organization_path, profile_patch, update_profile,
+        MembershipsResponse, NameRequest, OrganizationDetailResponse,
+        OrganizationProfilePatchResponse, OrganizationProfileResponse, OrganizationResponse,
+        organization_path, profile_patch, update_profile,
     };
     use crate::cli::{Cli, Command, OrganizationCommand, OrganizationProfileCommand};
     use crate::client::{ApiClient, ApiResponse};
@@ -517,7 +526,7 @@ mod tests {
             send_response(
                 &mut second,
                 "200 OK",
-                PROFILE_BODY,
+                r#"{"profile":{"legalName":"Example Ltd.","country":null,"address":null,"billingEmail":null,"phone":null},"updatedAt":"2026-09-24T00:00:00.000Z","version":"2"}"#,
                 Some("\"organization-profile-2\""),
             )
             .await;
@@ -535,11 +544,12 @@ mod tests {
             panic!("update expected")
         };
         let patch: Value = profile_patch(*fields).expect("valid patch");
-        let response: ApiResponse<OrganizationProfileResponse> =
+        let response: ApiResponse<OrganizationProfilePatchResponse> =
             update_profile(&client, ORG_ID, &patch)
                 .await
                 .expect("profile updated");
         assert_eq!(response.request_id.as_deref(), Some("req-org"));
+        assert_eq!(response.value.version, "2");
         server.await.expect("API server");
     }
 
@@ -652,7 +662,7 @@ mod tests {
             .await;
         });
         let path: String = organization_path(ORG_ID, "/profile").expect("profile path");
-        let result: Result<ApiResponse<OrganizationProfileResponse>, CliError> = client
+        let result: Result<ApiResponse<OrganizationProfilePatchResponse>, CliError> = client
             .patch_if_match(
                 &path,
                 &serde_json::json!({"phone": null}),
