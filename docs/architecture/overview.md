@@ -19,4 +19,4 @@ The first end-to-end slice is `auth login|status|logout` plus `personal show|upd
 3. The API client sends the access token as `Authorization: Bearer` to d6e-auth, parses the documented response, and preserves `X-Request-Id` for diagnostics.
 4. Command handlers map API objects to a stable JSON result or structured error. One-time Auth Client secrets use an explicit output destination.
 
-See [authentication.md](authentication.md) for the login sequence and [api-contract.md](api-contract.md) for the resource contract. The decisions are recorded in [PKCE public client](decisions/2026-09-24-pkce-public-client.md) and [local credential storage](decisions/2026-09-24-local-credential-storage.md).
+See [authentication.md](authentication.md) for the login sequence and [api-contract.md](api-contract.md) for the resource contract. The decisions are recorded in [PKCE public client](decisions/2026-09-24-pkce-public-client.md), [local credential storage](decisions/2026-09-24-local-credential-storage.md), and [one-time Auth Client secret output](decisions/2026-09-24-auth-client-secret-output.md).

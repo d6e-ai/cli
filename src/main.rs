@@ -1,4 +1,5 @@
 mod auth;
+mod auth_client;
 mod cli;
 mod client;
 #[cfg(test)]
@@ -7,6 +8,7 @@ mod error;
 mod organization;
 mod output;
 mod personal;
+mod secret_output;
 mod token_store;
 
 use std::process::ExitCode;

@@ -93,4 +93,68 @@ mod tests {
             409
         );
     }
+
+    #[test]
+    fn auth_client_commands_match_pinned_d6e_auth_contract() {
+        let contract: Value = serde_json::from_str(include_str!(
+            "../docs/architecture/contracts/d6e-cli-user-api.v1.json"
+        ))
+        .expect("valid contract JSON");
+        let operations: &[Value] = contract["operations"].as_array().expect("operations array");
+        for (id, method, path) in [
+            (
+                "authClients.list",
+                "GET",
+                "/organizations/{organizationId}/auth-clients",
+            ),
+            (
+                "authClients.get",
+                "GET",
+                "/organizations/{organizationId}/auth-clients/{clientId}",
+            ),
+            (
+                "authClients.create",
+                "POST",
+                "/organizations/{organizationId}/auth-clients",
+            ),
+            (
+                "authClients.update",
+                "PATCH",
+                "/organizations/{organizationId}/auth-clients/{clientId}",
+            ),
+            (
+                "authClients.revoke",
+                "PATCH",
+                "/organizations/{organizationId}/auth-clients/{clientId}",
+            ),
+            (
+                "authClients.rotateSecret",
+                "POST",
+                "/organizations/{organizationId}/auth-clients/{clientId}/secret",
+            ),
+        ] {
+            let entry: &Value = operation(operations, id);
+            assert_eq!(entry["method"], method);
+            assert_eq!(entry["path"], path);
+        }
+        assert_eq!(
+            operation(operations, "authClients.revoke")["request"]["exactBody"],
+            serde_json::json!({"status":"inactive"})
+        );
+        assert_eq!(
+            operation(operations, "authClients.rotateSecret")["response"]["oneTimeSecretField"],
+            "clientSecret"
+        );
+        for id in [
+            "authClients.list",
+            "authClients.get",
+            "authClients.update",
+            "authClients.revoke",
+        ] {
+            assert_eq!(
+                operation(operations, id)["response"]["containsSecret"],
+                false
+            );
+        }
+    }
 }
