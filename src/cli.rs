@@ -77,7 +77,7 @@ pub enum AuthClientCommand {
         #[arg(long)]
         name: String,
         #[arg(long = "redirect-uri")]
-        redirect_uris: Vec<Url>,
+        redirect_uris: Vec<String>,
         #[arg(long = "allowed-email-domain")]
         allowed_email_domains: Vec<String>,
         #[arg(long, value_enum, default_value_t = AuthClientStatus::Active)]
@@ -93,7 +93,7 @@ pub enum AuthClientCommand {
         #[arg(long)]
         name: Option<String>,
         #[arg(long = "redirect-uri", conflicts_with = "clear_redirect_uris")]
-        redirect_uris: Vec<Url>,
+        redirect_uris: Vec<String>,
         #[arg(long)]
         clear_redirect_uris: bool,
         #[arg(

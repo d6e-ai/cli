@@ -96,9 +96,13 @@ fn non_empty_name(value: &str) -> Result<&str, CliError> {
     Ok(trimmed)
 }
 
-fn redirect_uri_strings(uris: Vec<Url>) -> Result<Vec<String>, CliError> {
+fn redirect_uri_strings(uris: Vec<String>) -> Result<Vec<String>, CliError> {
     let mut values: Vec<String> = Vec::with_capacity(uris.len());
-    for uri in uris {
+    for raw in uris {
+        let value: &str = raw.trim();
+        let uri: Url = Url::parse(value).map_err(|_| CliError::InvalidInput {
+            message: "redirect URI must be an absolute HTTP or HTTPS URL".to_owned(),
+        })?;
         let scheme: &str = uri.scheme();
         let host: Option<&str> = uri.host_str();
         let loopback: bool = matches!(host, Some("localhost" | "127.0.0.1" | "[::1]" | "::1"));
@@ -107,14 +111,15 @@ fn redirect_uri_strings(uris: Vec<Url>) -> Result<Vec<String>, CliError> {
                 message: "redirect URI must use HTTPS or loopback HTTP".to_owned(),
             });
         }
-        values.push(uri.to_string());
+        // d6e-auth stores the trimmed input verbatim; OAuth redirect matching is exact.
+        values.push(value.to_owned());
     }
     Ok(values)
 }
 
 fn update_body(
     name: Option<String>,
-    redirect_uris: Vec<Url>,
+    redirect_uris: Vec<String>,
     clear_redirect_uris: bool,
     allowed_email_domains: Vec<String>,
     clear_allowed_email_domains: bool,
@@ -358,12 +363,28 @@ mod tests {
 
     #[test]
     fn redirect_uri_rejects_non_loopback_plain_http() {
-        let remote: Url = Url::parse("http://example.com/callback").expect("URL");
+        let remote: String = "http://example.com/callback".to_owned();
         assert!(redirect_uri_strings(vec![remote]).is_err());
-        let loopback: Url = Url::parse("http://127.0.0.1:9876/callback").expect("URL");
+        let loopback: String = "http://127.0.0.1:9876/callback".to_owned();
         assert_eq!(
             redirect_uri_strings(vec![loopback]).expect("loopback URI"),
             ["http://127.0.0.1:9876/callback"]
+        );
+    }
+
+    #[test]
+    fn redirect_uri_preserves_exact_trimmed_input() {
+        let values: Vec<String> = redirect_uri_strings(vec![
+            " https://example.com:443 ".to_owned(),
+            "https://example.com/a/../callback".to_owned(),
+        ])
+        .expect("valid redirect URIs");
+        assert_eq!(
+            values,
+            [
+                "https://example.com:443",
+                "https://example.com/a/../callback"
+            ]
         );
     }
 
@@ -564,7 +585,7 @@ mod tests {
             AuthClientCommand::Create {
                 organization_id: ORG_ID.to_owned(),
                 name: "New App".to_owned(),
-                redirect_uris: vec![Url::parse("https://example.com/callback").expect("URL")],
+                redirect_uris: vec!["https://example.com/callback".to_owned()],
                 allowed_email_domains: vec!["example.com".to_owned()],
                 status: AuthClientStatus::Active,
                 secret_output: create_path.to_str().expect("UTF-8 path").to_owned(),
