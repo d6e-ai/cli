@@ -22,6 +22,9 @@ pub enum CliError {
     #[error("D6E Auth response is missing a required header: {header}")]
     MissingApiHeader { header: &'static str },
 
+    #[error("the Auth Client secret could not be written; the server operation may have completed")]
+    SecretPersistence,
+
     #[error("{message}")]
     Api {
         status: StatusCode,
@@ -48,7 +51,10 @@ impl CliError {
             Self::Api { status, .. } if status.as_u16() == 404 => 5,
             Self::Api { status, .. } if status.as_u16() == 409 => 6,
             Self::Api { .. } | Self::Transport(_) | Self::MissingApiHeader { .. } => 7,
-            Self::Io(_) | Self::Serialization(_) | Self::CredentialStore => 8,
+            Self::Io(_)
+            | Self::Serialization(_)
+            | Self::CredentialStore
+            | Self::SecretPersistence => 8,
         }
     }
 
@@ -60,6 +66,7 @@ impl CliError {
             Self::CredentialStore => "credential_store_error",
             Self::Transport(_) => "network_error",
             Self::MissingApiHeader { .. } => "api_protocol_error",
+            Self::SecretPersistence => "secret_output_error",
             Self::Api { code, .. } => code,
             Self::Io(_) => "io_error",
             Self::Serialization(_) => "serialization_error",

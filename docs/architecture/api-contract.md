@@ -24,8 +24,8 @@ The OAuth token endpoint `/api/v1/auth/token` is specified by d6e-auth's route c
 
 `d6e organization profile show|update` use profile GET/PATCH. Update first reads the current profile and sends its `ETag` as `If-Match`; omitted fields are preserved, explicit `null` clears a field, and a stale version returns `409` without an automatic retry. An absent profile has version `0`. The CLI treats a missing GET `ETag` as a protocol error. Server `428` responses are surfaced with their API code and request ID.
 
-The v1 contract also includes organization Auth Client list/get/create/update/revoke/rotate-secret.
+`d6e organization auth-client list|show|create|update|revoke|rotate-secret` uses the v1 Auth Client operations. The canonical rotation endpoint is `POST /api/v1/organizations/{organizationId}/auth-clients/{clientId}/secret` with `{}`. `revoke` sends exactly `{ "status": "inactive" }` through PATCH; physical deletion is not exposed. An Auth Client may be addressed by UUID or its generated `d6e_` client ID.
 
-The organization Auth Client create and rotate-secret responses reveal `clientSecret` exactly once. List, get, update, and revoke responses contain no secret. The CLI must require an explicit secret destination and must not put the secret into logs, ordinary JSON output, errors, or fixtures.
+The organization Auth Client create and rotate-secret responses reveal `clientSecret` exactly once. List, get, update, and revoke responses contain no secret. Creation and rotation require an explicit secret destination, prepared before the mutation. The secret is excluded from ordinary JSON output, errors, and logs. See the [one-time secret output decision](decisions/2026-09-24-auth-client-secret-output.md).
 
 The contract excludes organization deletion/status changes, membership/invitation management, tax ID mutation, and Auth Client deletion. A CLI operation must not infer authority from JWT display claims or from a cached membership list.

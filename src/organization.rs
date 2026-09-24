@@ -77,7 +77,7 @@ struct NameRequest<'a> {
     name: &'a str,
 }
 
-fn organization_path(organization_id: &str, suffix: &str) -> Result<String, CliError> {
+pub(crate) fn organization_path(organization_id: &str, suffix: &str) -> Result<String, CliError> {
     let groups: Vec<&str> = organization_id.split('-').collect();
     let lengths: [usize; 5] = [8, 4, 4, 4, 12];
     let valid: bool = groups.len() == lengths.len()
@@ -249,6 +249,9 @@ pub async fn run(
             output::print_data(&response.value, response.request_id.as_deref())
         }
         OrganizationCommand::Profile(args) => run_profile(&client, args.command).await,
+        OrganizationCommand::AuthClient(args) => {
+            crate::auth_client::run(&client, args.command).await
+        }
     }
 }
 

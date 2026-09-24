@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use url::Url;
 
 #[derive(Debug, Parser)]
@@ -52,6 +52,88 @@ pub enum OrganizationCommand {
     },
     /// Read or update the organization's billing profile.
     Profile(Box<OrganizationProfileArgs>),
+    /// Manage organization-owned Auth Clients.
+    AuthClient(Box<AuthClientArgs>),
+}
+
+#[derive(Debug, Args)]
+pub struct AuthClientArgs {
+    #[command(subcommand)]
+    pub command: AuthClientCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AuthClientCommand {
+    /// List Auth Client metadata (never secrets).
+    List { organization_id: String },
+    /// Show one Auth Client by UUID or client ID.
+    Show {
+        organization_id: String,
+        client_id: String,
+    },
+    /// Create an Auth Client; its secret is returned only once.
+    Create {
+        organization_id: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long = "redirect-uri")]
+        redirect_uris: Vec<String>,
+        #[arg(long = "allowed-email-domain")]
+        allowed_email_domains: Vec<String>,
+        #[arg(long, value_enum, default_value_t = AuthClientStatus::Active)]
+        status: AuthClientStatus,
+        /// New file to create, or '-' to explicitly print the secret to stdout.
+        #[arg(long, value_name = "NEW_FILE_OR_DASH")]
+        secret_output: String,
+    },
+    /// Change only the specified Auth Client metadata fields.
+    Update {
+        organization_id: String,
+        client_id: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long = "redirect-uri", conflicts_with = "clear_redirect_uris")]
+        redirect_uris: Vec<String>,
+        #[arg(long)]
+        clear_redirect_uris: bool,
+        #[arg(
+            long = "allowed-email-domain",
+            conflicts_with = "clear_allowed_email_domains"
+        )]
+        allowed_email_domains: Vec<String>,
+        #[arg(long)]
+        clear_allowed_email_domains: bool,
+        #[arg(long, value_enum)]
+        status: Option<AuthClientStatus>,
+    },
+    /// Disable an Auth Client without deleting it.
+    Revoke {
+        organization_id: String,
+        client_id: String,
+    },
+    /// Rotate a secret; the new value is returned only once.
+    RotateSecret {
+        organization_id: String,
+        client_id: String,
+        /// New file to create, or '-' to explicitly print the secret to stdout.
+        #[arg(long, value_name = "NEW_FILE_OR_DASH")]
+        secret_output: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum AuthClientStatus {
+    Active,
+    Inactive,
+}
+
+impl AuthClientStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Inactive => "inactive",
+        }
+    }
 }
 
 #[derive(Debug, Args)]

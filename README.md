@@ -10,6 +10,7 @@ d6e personal update --name "Your name"
 d6e organization list
 d6e organization create --name "Example Ltd."
 d6e organization profile update ORGANIZATION_ID --legal-name "Example Ltd." --country SG
+d6e organization auth-client create ORGANIZATION_ID --name "App" --secret-output ./app-secret.json
 d6e auth logout
 ```
 
@@ -20,6 +21,8 @@ Commands return one JSON object on stdout. Errors return one JSON object on stde
 Architecture and API details are in [docs/architecture](docs/architecture/overview.md).
 
 Organization commands include `list`, `show`, `create`, `update`, and `profile show|update`. Profile updates accept `--legal-name`, `--country`, `--billing-email`, `--phone`, and `--address-line1`, `--address-line2`, `--address-city`, `--address-state`, `--address-postal-code`. Use the matching `--clear-*` flag to remove a field, or `--clear-address` to remove the entire address. The CLI reads the latest profile ETag before updating and reports a conflict if another update wins the race.
+
+`organization auth-client` manages application credentials. Creating or rotating a secret requires `--secret-output` with a new file path; pass `-` only when you explicitly want the secret on stdout. File output is supported on Unix.
 
 ## Development
 
