@@ -25,6 +25,41 @@ pub enum Command {
     Personal(PersonalArgs),
     /// Manage organizations you belong to.
     Organization(Box<OrganizationArgs>),
+    /// Manage workspaces on a D6E instance.
+    Instance(InstanceArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct InstanceArgs {
+    /// HTTPS instance origin (loopback HTTP is allowed for local development).
+    #[arg(long, env = "D6E_INSTANCE_URL", global = true)]
+    pub instance_url: Option<Url>,
+
+    #[command(subcommand)]
+    pub command: InstanceCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum InstanceCommand {
+    /// List or create your workspaces on this instance.
+    Workspace(InstanceWorkspaceArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct InstanceWorkspaceArgs {
+    #[command(subcommand)]
+    pub command: InstanceWorkspaceCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum InstanceWorkspaceCommand {
+    /// List workspaces where you are a member.
+    List,
+    /// Create a workspace and request billing provisioning.
+    Create {
+        #[arg(long)]
+        name: String,
+    },
 }
 
 #[derive(Debug, Args)]
