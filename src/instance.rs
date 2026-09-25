@@ -54,6 +54,9 @@ struct BillingProvisioning {
 enum BillingStatus {
     Pending,
     ProvisioningFailed,
+    // Unrecognized status still means the workspace was created; don't fail decoding.
+    #[serde(other)]
+    Unknown,
 }
 
 fn validate_exchange_response(
