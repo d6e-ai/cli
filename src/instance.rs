@@ -118,8 +118,10 @@ pub async fn run(
             InstanceWorkspaceCommand::Create { name } => {
                 let request: CreateWorkspaceRequest<'_> =
                     CreateWorkspaceRequest { name: name.trim() };
-                let response: ApiResponse<CreateWorkspaceResponse> =
-                    instance_client.post(WORKSPACES_PATH, &request).await?;
+                let response: ApiResponse<CreateWorkspaceResponse> = instance_client
+                    .post(WORKSPACES_PATH, &request)
+                    .await
+                    .map_err(CliError::for_workspace_create)?;
                 output::print_data(&response.value, response.request_id.as_deref())
             }
         },
