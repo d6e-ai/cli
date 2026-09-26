@@ -11,10 +11,14 @@ d6e organization list
 d6e organization create --name "Example Ltd."
 d6e organization profile update ORGANIZATION_ID --legal-name "Example Ltd." --country SG
 d6e organization auth-client create ORGANIZATION_ID --name "App" --secret-output ./app-secret.json
+d6e instance --instance-url https://instance.example.com workspace list
+d6e instance --instance-url https://instance.example.com workspace create --name "My workspace"
 d6e auth logout
 ```
 
 Use `d6e auth login --no-open` when you need to open the sign-in URL manually. `D6E_AUTH_URL` defaults to `https://www.d6e.ai`; for local development, use an HTTP URL on `127.0.0.1` or `[::1]`.
+
+`d6e instance workspace` needs an instance origin from `--instance-url` or `D6E_INSTANCE_URL`. Sign in first. Workspace creation reports billing provisioning status in its JSON result; a created workspace may still need billing setup.
 
 Commands return one JSON object on stdout. Errors return one JSON object on stderr with a stable code and exit status. The CLI stores only the refresh token in the OS keyring. `auth logout` removes this machine's credential; it does not revoke already issued tokens on the server.
 

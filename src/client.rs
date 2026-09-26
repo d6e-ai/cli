@@ -4,7 +4,7 @@ use reqwest::{Method, Response, StatusCode};
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use url::Url;
+use url::{Host, Url};
 
 use crate::error::CliError;
 
@@ -30,10 +30,18 @@ struct ErrorResponse {
     request_id: Option<String>,
 }
 
-pub fn normalize_auth_url(mut auth_url: Url) -> Result<Url, CliError> {
+pub fn normalize_auth_url(auth_url: Url) -> Result<Url, CliError> {
+    normalize_origin(auth_url, "--auth-url")
+}
+
+pub fn normalize_origin(mut auth_url: Url, option: &str) -> Result<Url, CliError> {
     let is_secure: bool = auth_url.scheme() == "https";
-    let is_local_http: bool =
-        auth_url.scheme() == "http" && matches!(auth_url.host_str(), Some("127.0.0.1" | "[::1]"));
+    let is_loopback: bool = match auth_url.host() {
+        Some(Host::Ipv4(address)) => address == std::net::Ipv4Addr::LOCALHOST,
+        Some(Host::Ipv6(address)) => address == std::net::Ipv6Addr::LOCALHOST,
+        _ => false,
+    };
+    let is_local_http: bool = auth_url.scheme() == "http" && is_loopback;
     if (!is_secure && !is_local_http)
         || auth_url.cannot_be_a_base()
         || auth_url.query().is_some()
@@ -43,7 +51,7 @@ pub fn normalize_auth_url(mut auth_url: Url) -> Result<Url, CliError> {
         || !matches!(auth_url.path(), "" | "/")
     {
         return Err(CliError::InvalidInput {
-            message: "--auth-url must be an HTTPS origin or a loopback HTTP origin".to_owned(),
+            message: format!("{option} must be an HTTPS origin or HTTP on 127.0.0.1/[::1]"),
         });
     }
     auth_url.set_path("/");
@@ -93,7 +101,7 @@ where
     let message: String = error_body
         .as_ref()
         .and_then(|body| body.message.clone())
-        .unwrap_or_else(|| format!("D6E Auth returned HTTP {}", status.as_u16()));
+        .unwrap_or_else(|| format!("API returned HTTP {}", status.as_u16()));
     let request_id: Option<String> = error_body
         .and_then(|body| body.request_id)
         .or(header_request_id);
