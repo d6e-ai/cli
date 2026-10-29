@@ -1,17 +1,18 @@
+# Rust fmt, clippy, and tests. Manual only, and Linux only.
+#
+# A push or pull request used to start ubuntu, macOS, and Windows. macOS
+# minutes are billed at 10x and Windows at 2x. Run those locally when a
+# platform check is needed. Start the Linux job by hand:
+#
+#   gh workflow run ci.yml --ref <branch>
 name: Rust
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   verify:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
